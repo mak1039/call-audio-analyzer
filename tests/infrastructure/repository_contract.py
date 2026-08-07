@@ -83,15 +83,19 @@ class BatchRepositoryContract:
 
     def test_lists_recent_batches_newest_first(self, repository: BatchRepository):
         older, newer = a_batch(minutes=0), a_batch(minutes=5)
-        repository.save(older)
         repository.save(newer)
+        repository.save(older)
 
         listed = repository.list_recent(10)
 
-        assert [batch.batch_id for batch in listed[:2]] == [newer.batch_id, older.batch_id]
+        assert [batch.batch_id for batch in listed] == [newer.batch_id, older.batch_id]
 
     def test_list_recent_honours_the_limit(self, repository: BatchRepository):
-        for minute in range(3):
-            repository.save(a_batch(minutes=minute))
+        earliest, middle, latest = a_batch(minutes=0), a_batch(minutes=1), a_batch(minutes=2)
+        repository.save(middle)
+        repository.save(latest)
+        repository.save(earliest)
 
-        assert len(repository.list_recent(2)) == 2
+        listed = repository.list_recent(2)
+
+        assert [batch.batch_id for batch in listed] == [latest.batch_id, middle.batch_id]
