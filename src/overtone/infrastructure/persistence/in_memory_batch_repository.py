@@ -16,3 +16,9 @@ class InMemoryBatchRepository(BatchRepository):
         if batch_id not in self._batches:
             raise BatchNotFoundError(f"no batch with id {batch_id}")
         return self._batches[batch_id]
+
+    def list_recent(self, limit: int) -> tuple[Batch, ...]:
+        newest_first = sorted(
+            self._batches.values(), key=lambda batch: batch.created_at, reverse=True
+        )
+        return tuple(newest_first[:limit])
