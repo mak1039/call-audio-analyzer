@@ -53,8 +53,11 @@ class RecordingRepository(InMemoryBatchRepository):
     def __init__(self) -> None:
         super().__init__()
         self.saves: list[Batch] = []
+        self.explode_on_completion = False
 
     def save(self, batch: Batch) -> None:
+        if self.explode_on_completion and batch.status is BatchStatus.COMPLETED:
+            raise RuntimeError("database went away")
         super().save(batch)
         self.saves.append(batch)
 
@@ -183,3 +186,25 @@ def test_progress_is_persisted_after_each_item(
 def test_an_unknown_batch_is_rejected(repository: RecordingRepository, storage: LocalFileStorage):
     with pytest.raises(BatchNotFoundError):
         run(repository, storage, FakeAnalyzer(), new_batch_id())
+
+
+def test_audio_is_deleted_once_processing_finishes(
+    repository: RecordingRepository, storage: LocalFileStorage
+):
+    batch_id = seed(repository, storage, BatchItem.pending("a.ogg"))
+
+    run(repository, storage, FakeAnalyzer(), batch_id)
+
+    assert not storage.path_for(batch_id, "a.ogg").exists()
+
+
+def test_a_crash_outside_item_analysis_marks_the_batch_failed(
+    repository: RecordingRepository, storage: LocalFileStorage
+):
+    batch_id = seed(repository, storage, BatchItem.pending("a.ogg"))
+    repository.explode_on_completion = True
+
+    with pytest.raises(RuntimeError):
+        run(repository, storage, FakeAnalyzer(), batch_id)
+
+    assert repository.get(batch_id).status is BatchStatus.FAILED

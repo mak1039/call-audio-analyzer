@@ -1,8 +1,12 @@
+import logging
+
 from overtone.application.ports.audio_analyzer import AudioAnalyzer
 from overtone.application.ports.batch_repository import BatchRepository
 from overtone.application.ports.file_storage import FileStorage
 from overtone.domain.audio_clip import AudioClip
-from overtone.domain.batch import BatchId, BatchItem
+from overtone.domain.batch import Batch, BatchId, BatchItem
+
+logger = logging.getLogger(__name__)
 
 
 class ProcessBatch:
@@ -25,10 +29,25 @@ class ProcessBatch:
     def execute(self, batch_id: BatchId) -> None:
         batch = self._repository.get(batch_id).started()
         self._repository.save(batch)
+        try:
+            self._run(batch)
+        except Exception:
+            self._mark_failed(batch)
+            raise
+        finally:
+            self._storage.discard(batch_id)
+
+    def _run(self, batch: Batch) -> None:
         for item in batch.pending_items:
-            batch = batch.replacing(self._analyze(batch_id, item))
+            batch = batch.replacing(self._analyze(batch.batch_id, item))
             self._repository.save(batch)
         self._repository.save(batch.completed())
+
+    def _mark_failed(self, batch: Batch) -> None:
+        try:
+            self._repository.save(batch.failed())
+        except Exception:  # noqa: BLE001 - already failing; do not mask the original error
+            logger.exception("could not record batch failure")
 
     def _analyze(self, batch_id: BatchId, item: BatchItem) -> BatchItem:
         try:

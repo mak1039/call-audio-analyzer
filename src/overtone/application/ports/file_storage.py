@@ -12,3 +12,7 @@ class FileStorage(ABC):
     @abstractmethod
     def path_for(self, batch_id: BatchId, filename: str) -> Path:
         """Return where a named file within this batch lives."""
+
+    @abstractmethod
+    def discard(self, batch_id: BatchId) -> None:
+        """Delete this batch's workspace and its audio. Safe to call more than once."""

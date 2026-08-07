@@ -48,3 +48,21 @@ def test_stub_analyzer_is_deterministic(tmp_path: Path):
     clip = AudioClip("a.ogg", tmp_path / "a.ogg")
 
     assert analyzer.analyze(clip) == analyzer.analyze(clip)
+
+
+def test_discard_removes_the_batch_workspace(tmp_path: Path):
+    storage = LocalFileStorage(tmp_path)
+    batch_id = new_batch_id()
+    storage.path_for(batch_id, "call_001.ogg").write_bytes(b"audio")
+
+    storage.discard(batch_id)
+
+    assert not (tmp_path / batch_id).exists()
+
+
+def test_discard_is_safe_to_call_twice(tmp_path: Path):
+    storage = LocalFileStorage(tmp_path)
+    batch_id = new_batch_id()
+
+    storage.discard(batch_id)
+    storage.discard(batch_id)

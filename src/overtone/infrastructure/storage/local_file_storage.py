@@ -1,3 +1,4 @@
+import shutil
 from pathlib import Path
 
 from overtone.application.ports.file_storage import FileStorage
@@ -21,3 +22,6 @@ class LocalFileStorage(FileStorage):
         if candidate.parent != workspace.resolve():
             raise ValueError(f"filename '{filename}' escapes the batch workspace")
         return candidate
+
+    def discard(self, batch_id: BatchId) -> None:
+        shutil.rmtree(self._root / batch_id, ignore_errors=True)
