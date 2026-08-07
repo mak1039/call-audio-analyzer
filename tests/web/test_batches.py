@@ -1,11 +1,40 @@
 import io
 import json
 import zipfile
+from collections.abc import Callable
+from pathlib import Path
 
 from flask import Flask
 from flask.testing import FlaskClient
 
+from overtone.application.ports.job_runner import JobRunner
+from overtone.composition.config import AppConfig
+from overtone.web.app import create_app
+
 MANIFEST = b"name,result_json\ncall_001.ogg,\ncall_002.ogg,\ncall_missing.ogg,\n"
+
+
+class DeferredJobRunner(JobRunner):
+    """Queues work instead of running it, so tests can run it outside the request.
+
+    This is what catches a submitted closure that secretly depends on Flask's request
+    or application context: SynchronousJobRunner runs work inline on the request
+    thread, where that context still exists, and would never expose the bug.
+    """
+
+    def __init__(self) -> None:
+        self.pending: list[Callable[[], None]] = []
+
+    def submit(self, work: Callable[[], None]) -> None:
+        self.pending.append(work)
+
+    def run_pending(self) -> None:
+        jobs, self.pending = self.pending, []
+        for job in jobs:
+            job()
+
+    def shutdown(self) -> None:
+        return None
 
 
 def batch_archive() -> io.BytesIO:
@@ -131,6 +160,24 @@ def test_an_unknown_batch_returns_404(logged_in: FlaskClient):
 def test_batch_routes_require_a_session(client: FlaskClient):
     assert client.get("/batches/anything").status_code == 302
     assert client.post("/batches").status_code == 302
+    assert client.get("/batches/anything/status.json").status_code == 302
+    assert client.get("/batches/anything/download/csv").status_code == 302
+
+
+def test_processing_deferred_past_the_request_does_not_need_an_app_context(tmp_path: Path):
+    runner = DeferredJobRunner()
+    config = AppConfig(workspace_root=tmp_path / "workspace", secret_key="test-secret")
+    app = create_app(config, job_runner=runner)
+    client = app.test_client()
+    client.post("/login", data={"username": "admin", "password": "admin"})
+
+    location = upload(client)
+    assert runner.pending, "upload() should have queued processing instead of running it"
+
+    runner.run_pending()  # outside the request/app context the view ran under
+
+    payload = json.loads(client.get(f"{location}/status.json").data)
+    assert payload["status"] == "completed"
 
 
 def test_an_oversized_upload_gets_a_readable_message(app: Flask, logged_in: FlaskClient):
