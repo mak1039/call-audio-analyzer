@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Do not run `git commit` or `git push`.** Leave all changes in the working tree; the user reviews and commits. Every task ends with a verification step instead of a commit.
+- **Commit locally at the end of each task. Never run `git push`**, never open a PR, never touch `origin`. The user reviews local history and pushes themselves.
 - Hard ceiling **20 lines per function**, target 5–10. One level of abstraction per function.
 - Maximum three positional parameters; beyond that pass a value object.
 - No boolean parameters that switch behaviour.
@@ -1283,22 +1283,9 @@ def test_logout_ends_the_session(logged_in: FlaskClient):
     logged_in.post("/logout")
 
     assert logged_in.get("/").status_code == 302
-
-
-def test_an_oversized_upload_gets_a_readable_message(app: Flask, logged_in: FlaskClient):
-    app.config["MAX_CONTENT_LENGTH"] = 10
-
-    response = logged_in.post(
-        "/batches",
-        data={"archive": (io.BytesIO(b"x" * 5000), "big.zip")},
-        content_type="multipart/form-data",
-    )
-
-    assert response.status_code == 413
-    assert "too large" in response.data.decode().lower()
 ```
 
-That test needs `import io` and `from flask import Flask` at the top of the file.
+The oversized-upload case is tested in Task 9, because it needs the `POST /batches` route.
 
 - [ ] **Step 3: Run tests to verify they fail**
 
@@ -1378,7 +1365,46 @@ def _credentials_match(username: str, password: str) -> bool:
 
 - [ ] **Step 6: Write the app factory**
 
-`src/overtone/web/app.py`. `batches` blueprint arrives in Task 9 — register it now and create the module in that task, or temporarily comment the two `batches` lines and restore them in Task 9:
+First create the minimal `batches` blueprint this task needs. The login redirect and `base.html` both reference `batches.dashboard`, so it must exist now; Task 9 adds the upload, detail, status, and download routes to this same file.
+
+`src/overtone/web/blueprints/batches.py`:
+
+```python
+from typing import Any
+
+from flask import Blueprint, current_app, render_template
+
+from overtone.composition.container import Container
+from overtone.web.auth.session_guard import login_required
+
+blueprint = Blueprint("batches", __name__)
+RECENT_LIMIT = 20
+
+
+@blueprint.get("/")
+@login_required
+def dashboard() -> str:
+    return render_template("dashboard.html", batches=_container().batches.list_recent(RECENT_LIMIT))
+
+
+def _container() -> Container:
+    container: Container = current_app.extensions["overtone"]
+    return container
+```
+
+Also create a minimal `src/overtone/web/templates/dashboard.html` so the route renders — Task 9 replaces it with the full version:
+
+```html
+{% extends "base.html" %}
+{% block title %}Batches — Overtone{% endblock %}
+{% block content %}
+<h2>Batches</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<p>{{ batches|length }} batch(es).</p>
+{% endblock %}
+```
+
+Now `src/overtone/web/app.py`:
 
 ```python
 from flask import Flask
@@ -1543,8 +1569,9 @@ Expected: all clean.
 ### Task 9: Batches blueprint — upload, detail, status, download
 
 **Files:**
-- Create: `src/overtone/web/blueprints/batches.py`
-- Create: `src/overtone/web/templates/dashboard.html`, `src/overtone/web/templates/batch_detail.html`
+- Modify: `src/overtone/web/blueprints/batches.py` (Task 8 created it with only `dashboard`; add the four remaining routes)
+- Modify: `src/overtone/web/templates/dashboard.html` (replace Task 8's placeholder with the full version below)
+- Create: `src/overtone/web/templates/batch_detail.html`
 - Create: `src/overtone/web/static/poll.js`
 - Create: `tests/web/test_batches.py`
 - Modify: `pyproject.toml` (include package data so templates ship in the wheel)
@@ -1690,7 +1717,22 @@ def test_an_unknown_batch_returns_404(logged_in: FlaskClient):
 def test_batch_routes_require_a_session(client: FlaskClient):
     assert client.get("/batches/anything").status_code == 302
     assert client.post("/batches").status_code == 302
+
+
+def test_an_oversized_upload_gets_a_readable_message(app: Flask, logged_in: FlaskClient):
+    app.config["MAX_CONTENT_LENGTH"] = 10
+
+    response = logged_in.post(
+        "/batches",
+        data={"archive": (io.BytesIO(b"x" * 5000), "big.zip")},
+        content_type="multipart/form-data",
+    )
+
+    assert response.status_code == 413
+    assert "too large" in response.data.decode().lower()
 ```
+
+That last test needs `from flask import Flask` alongside the existing imports.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
