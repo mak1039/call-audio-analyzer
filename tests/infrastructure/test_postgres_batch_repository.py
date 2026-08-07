@@ -1,4 +1,5 @@
 import os
+from collections.abc import Iterator
 
 import pytest
 
@@ -16,9 +17,10 @@ pytestmark = pytest.mark.skipif(
 
 class TestPostgresBatchRepository(BatchRepositoryContract):
     @pytest.fixture
-    def repository(self) -> PostgresBatchRepository:
+    def repository(self) -> Iterator[PostgresBatchRepository]:
         assert DATABASE_URL is not None
         repository = PostgresBatchRepository(DATABASE_URL)
         repository.create_schema()
         repository.delete_all()
-        return repository
+        yield repository
+        repository.close()

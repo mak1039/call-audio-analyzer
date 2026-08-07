@@ -1,8 +1,8 @@
 from pathlib import Path
 from typing import Any
 
-import psycopg
 from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 
 from overtone.application.ports.batch_repository import BatchRepository
 from overtone.domain.analysis_result import AnalysisResult
@@ -25,23 +25,28 @@ UPSERT = f"""
 class PostgresBatchRepository(BatchRepository):
     """Batch state in Postgres. One row per batch; items ride along as JSONB."""
 
-    def __init__(self, database_url: str) -> None:
-        self._database_url = database_url
+    def __init__(self, database_url: str, min_size: int = 1, max_size: int = 5) -> None:
+        self._pool = ConnectionPool(database_url, min_size=min_size, max_size=max_size, open=False)
+        self._pool.open()
+
+    def close(self) -> None:
+        self._pool.close()
 
     def create_schema(self) -> None:
-        with self._connect() as connection:
+        with self._pool.connection() as connection:
             connection.execute(SCHEMA.read_text(encoding="utf-8"))
 
     def delete_all(self) -> None:
-        with self._connect() as connection:
+        """Test-only helper. Not wired into any composition root or route."""
+        with self._pool.connection() as connection:
             connection.execute("DELETE FROM batches")
 
     def save(self, batch: Batch) -> None:
-        with self._connect() as connection:
+        with self._pool.connection() as connection:
             connection.execute(UPSERT, self._to_row(batch))
 
     def get(self, batch_id: BatchId) -> Batch:
-        with self._connect() as connection:
+        with self._pool.connection() as connection:
             row = connection.execute(
                 f"SELECT {COLUMNS} FROM batches WHERE batch_id = %s", (batch_id,)
             ).fetchone()
@@ -50,14 +55,11 @@ class PostgresBatchRepository(BatchRepository):
         return self._to_batch(row)
 
     def list_recent(self, limit: int) -> tuple[Batch, ...]:
-        with self._connect() as connection:
+        with self._pool.connection() as connection:
             rows = connection.execute(
                 f"SELECT {COLUMNS} FROM batches ORDER BY created_at DESC LIMIT %s", (limit,)
             ).fetchall()
         return tuple(self._to_batch(row) for row in rows)
-
-    def _connect(self) -> psycopg.Connection[Any]:
-        return psycopg.connect(self._database_url)
 
     def _to_row(self, batch: Batch) -> tuple[Any, ...]:
         items = [self._item_payload(item) for item in batch.items]
