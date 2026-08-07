@@ -40,6 +40,24 @@ class AnalysisResult:
             "confidence": self.confidence,
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> "AnalysisResult":
+        return cls(
+            emotional_tone=EmotionalTone(payload["emotional_tone"]),  # type: ignore[arg-type]
+            emotional_intensity=EmotionalIntensity(
+                payload["emotional_intensity"]  # type: ignore[arg-type]
+            ),
+            background_noise_present=bool(payload["background_noise_present"]),
+            background_noise_type=str(payload["background_noise_type"]),
+            background_noise_severity=NoiseSeverity(
+                payload["background_noise_severity"]  # type: ignore[arg-type]
+            ),
+            audio_quality=AudioQuality(payload["audio_quality"]),  # type: ignore[arg-type]
+            speaker_overlap_present=bool(payload["speaker_overlap_present"]),
+            long_silence_present=bool(payload["long_silence_present"]),
+            confidence=float(payload["confidence"]),  # type: ignore[arg-type]
+        )
+
     def _validate_confidence(self) -> None:
         if not 0.0 <= self.confidence <= 1.0:
             raise InvalidAnalysisResultError(

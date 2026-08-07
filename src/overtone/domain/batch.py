@@ -1,5 +1,6 @@
 import uuid
 from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import NewType
 
 from overtone.domain.analysis_result import AnalysisResult
@@ -39,6 +40,7 @@ class Batch:
     batch_id: BatchId
     items: tuple[BatchItem, ...]
     status: BatchStatus
+    created_at: datetime
     unmatched_files: tuple[str, ...] = ()
 
     @classmethod
@@ -46,12 +48,14 @@ class Batch:
         cls,
         batch_id: BatchId,
         items: tuple[BatchItem, ...],
+        created_at: datetime,
         unmatched_files: tuple[str, ...] = (),
     ) -> "Batch":
         return cls(
             batch_id=batch_id,
             items=items,
             status=BatchStatus.PENDING,
+            created_at=created_at,
             unmatched_files=unmatched_files,
         )
 
@@ -76,6 +80,9 @@ class Batch:
 
     def completed(self) -> "Batch":
         return replace(self, status=BatchStatus.COMPLETED)
+
+    def failed(self) -> "Batch":
+        return replace(self, status=BatchStatus.FAILED)
 
     def replacing(self, item: BatchItem) -> "Batch":
         index = self._index_of(item.filename)

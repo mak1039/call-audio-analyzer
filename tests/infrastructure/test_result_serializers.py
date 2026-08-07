@@ -1,6 +1,7 @@
 import csv
 import io
 import json
+from datetime import UTC, datetime
 
 import pytest
 
@@ -30,6 +31,8 @@ RESULT = AnalysisResult(
     confidence=0.82,
 )
 
+CREATED_AT = datetime(2026, 8, 7, 12, 0, tzinfo=UTC)
+
 
 @pytest.fixture
 def batch() -> Batch:
@@ -37,7 +40,9 @@ def batch() -> Batch:
         BatchItem.pending("call_001.ogg").succeeded(RESULT),
         BatchItem.pending("call_002.ogg").failed("RuntimeError: decoder blew up"),
     )
-    return Batch.create(new_batch_id(), items, unmatched_files=("stray.ogg",)).completed()
+    return Batch.create(
+        new_batch_id(), items, CREATED_AT, unmatched_files=("stray.ogg",)
+    ).completed()
 
 
 def csv_rows(batch: Batch) -> list[dict[str, str]]:

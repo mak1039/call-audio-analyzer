@@ -110,3 +110,17 @@ def test_accepts_consistent_quiet_result():
     assert result.background_noise_present is False
     assert result.background_noise_type == ""
     assert result.background_noise_severity is NoiseSeverity.NONE
+
+
+def test_from_dict_round_trips_a_result():
+    original = noisy_result()
+
+    assert AnalysisResult.from_dict(original.to_dict()) == original
+
+
+def test_from_dict_rejects_a_payload_that_breaks_the_contract():
+    payload = noisy_result().to_dict()
+    payload["confidence"] = 5.0
+
+    with pytest.raises(InvalidAnalysisResultError):
+        AnalysisResult.from_dict(payload)

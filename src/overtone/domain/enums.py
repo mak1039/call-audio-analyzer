@@ -32,6 +32,7 @@ class BatchStatus(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class ItemStatus(StrEnum):

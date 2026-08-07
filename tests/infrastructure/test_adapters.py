@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,8 @@ from overtone.infrastructure.persistence.in_memory_batch_repository import (
     InMemoryBatchRepository,
 )
 from overtone.infrastructure.storage.local_file_storage import LocalFileStorage
+
+CREATED_AT = datetime(2026, 8, 7, 12, 0, tzinfo=UTC)
 
 
 def test_workspace_is_created_and_scoped_to_the_batch(tmp_path: Path):
@@ -40,7 +43,7 @@ def test_path_for_rejects_a_filename_that_escapes_the_workspace(tmp_path: Path):
 
 def test_repository_returns_the_saved_batch():
     repository = InMemoryBatchRepository()
-    batch = Batch.create(new_batch_id(), (BatchItem.pending("a.ogg"),))
+    batch = Batch.create(new_batch_id(), (BatchItem.pending("a.ogg"),), CREATED_AT)
 
     repository.save(batch)
 
@@ -49,7 +52,7 @@ def test_repository_returns_the_saved_batch():
 
 def test_repository_keeps_only_the_latest_save():
     repository = InMemoryBatchRepository()
-    batch = Batch.create(new_batch_id(), (BatchItem.pending("a.ogg"),))
+    batch = Batch.create(new_batch_id(), (BatchItem.pending("a.ogg"),), CREATED_AT)
     repository.save(batch)
 
     repository.save(batch.started())

@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,8 @@ RESULT = AnalysisResult(
     long_silence_present=False,
     confidence=0.5,
 )
+
+CREATED_AT = datetime(2026, 8, 7, 12, 0, tzinfo=UTC)
 
 
 class FakeAnalyzer(AudioAnalyzer):
@@ -70,7 +73,7 @@ def seed(repository: RecordingRepository, storage: LocalFileStorage, *items: Bat
     batch_id = new_batch_id()
     for item in items:
         storage.path_for(batch_id, item.filename).write_bytes(b"audio")
-    repository.save(Batch.create(batch_id, items))
+    repository.save(Batch.create(batch_id, items, CREATED_AT))
     repository.saves.clear()
     return batch_id
 

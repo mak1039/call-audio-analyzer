@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 from overtone.application.ports.archive_extractor import ArchiveExtractor
@@ -38,6 +39,7 @@ class SubmitBatch:
         batch = Batch.create(
             batch_id,
             items=tuple(self._to_item(row, audio_names) for row in rows),
+            created_at=datetime.now(UTC),
             unmatched_files=self._unmatched(audio_names, rows),
         )
         self._repository.save(batch)

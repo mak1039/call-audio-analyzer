@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from overtone.domain.analysis_result import AnalysisResult
@@ -10,6 +12,8 @@ from overtone.domain.enums import (
     ItemStatus,
     NoiseSeverity,
 )
+
+CREATED_AT = datetime(2026, 8, 7, 12, 0, tzinfo=UTC)
 
 RESULT = AnalysisResult(
     emotional_tone=EmotionalTone.NEUTRAL,
@@ -26,7 +30,7 @@ RESULT = AnalysisResult(
 
 def batch_of(*filenames: str, unmatched: tuple[str, ...] = ()) -> Batch:
     items = tuple(BatchItem.pending(name) for name in filenames)
-    return Batch.create(new_batch_id(), items, unmatched_files=unmatched)
+    return Batch.create(new_batch_id(), items, CREATED_AT, unmatched_files=unmatched)
 
 
 def test_new_batch_id_is_unique():
@@ -114,3 +118,15 @@ def test_counts_reflect_item_outcomes():
     batch = batch.replacing(batch.items[1].failed("boom"))
 
     assert (batch.total, batch.succeeded_count, batch.failed_count) == (3, 1, 1)
+
+
+def test_batch_records_when_it_was_created():
+    batch = Batch.create(new_batch_id(), (BatchItem.pending("a.ogg"),), CREATED_AT)
+
+    assert batch.created_at == CREATED_AT
+
+
+def test_failed_marks_a_batch_whose_job_died():
+    batch = Batch.create(new_batch_id(), (BatchItem.pending("a.ogg"),), CREATED_AT)
+
+    assert batch.started().failed().status is BatchStatus.FAILED
