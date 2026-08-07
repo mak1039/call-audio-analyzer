@@ -1,8 +1,8 @@
-from datetime import UTC, datetime
 from pathlib import Path
 
 from overtone.application.ports.archive_extractor import ArchiveExtractor
 from overtone.application.ports.batch_repository import BatchRepository
+from overtone.application.ports.clock import Clock
 from overtone.application.ports.file_storage import FileStorage
 from overtone.application.ports.manifest_parser import ManifestParser, ManifestRow
 from overtone.domain.audio_clip import is_supported_audio
@@ -25,11 +25,13 @@ class SubmitBatch:
         parser: ManifestParser,
         storage: FileStorage,
         repository: BatchRepository,
+        clock: Clock,
     ) -> None:
         self._extractor = extractor
         self._parser = parser
         self._storage = storage
         self._repository = repository
+        self._clock = clock
 
     def execute(self, archive: Path) -> BatchId:
         batch_id = new_batch_id()
@@ -39,7 +41,7 @@ class SubmitBatch:
         batch = Batch.create(
             batch_id,
             items=tuple(self._to_item(row, audio_names) for row in rows),
-            created_at=datetime.now(UTC),
+            created_at=self._clock.now(),
             unmatched_files=self._unmatched(audio_names, rows),
         )
         self._repository.save(batch)

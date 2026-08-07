@@ -1,8 +1,10 @@
 import zipfile
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from overtone.application.ports.clock import Clock
 from overtone.application.use_cases.submit_batch import SubmitBatch
 from overtone.domain.enums import BatchStatus, ItemStatus
 from overtone.domain.exceptions import CorruptArchiveError, ManifestError
@@ -14,6 +16,12 @@ from overtone.infrastructure.persistence.in_memory_batch_repository import (
 from overtone.infrastructure.storage.local_file_storage import LocalFileStorage
 
 MANIFEST = b"name,result_json\ncall_001.ogg,\ncall_002.ogg,\n"
+CREATED_AT = datetime(2026, 8, 7, 12, 0, tzinfo=UTC)
+
+
+class FixedClock(Clock):
+    def now(self) -> datetime:
+        return CREATED_AT
 
 
 @pytest.fixture
@@ -33,6 +41,7 @@ def submit(repository: InMemoryBatchRepository, storage: LocalFileStorage) -> Su
         parser=CsvManifestParser(),
         storage=storage,
         repository=repository,
+        clock=FixedClock(),
     )
 
 
@@ -42,6 +51,18 @@ def build_zip(tmp_path: Path, entries: dict[str, bytes]) -> Path:
         for name, payload in entries.items():
             opened.writestr(name, payload)
     return archive
+
+
+def test_batch_is_stamped_with_the_submission_time(
+    submit: SubmitBatch, repository: InMemoryBatchRepository, tmp_path: Path
+):
+    archive = build_zip(
+        tmp_path, {"labels.csv": MANIFEST, "call_001.ogg": b"a", "call_002.ogg": b"b"}
+    )
+
+    batch = repository.get(submit.execute(archive))
+
+    assert batch.created_at == CREATED_AT
 
 
 def test_creates_one_pending_item_per_manifest_row_in_order(

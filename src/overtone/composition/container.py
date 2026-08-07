@@ -14,6 +14,7 @@ from overtone.infrastructure.persistence.in_memory_batch_repository import (
     InMemoryBatchRepository,
 )
 from overtone.infrastructure.storage.local_file_storage import LocalFileStorage
+from overtone.infrastructure.time.system_clock import SystemClock
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ def build_container(config: AppConfig) -> Container:
             parser=CsvManifestParser(),
             storage=storage,
             repository=repository,
+            clock=SystemClock(),
         ),
         process_batch=ProcessBatch(analyzer=analyzer, storage=storage, repository=repository),
         batches=repository,
