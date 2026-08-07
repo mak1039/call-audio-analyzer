@@ -1,7 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Batches — Overtone{% endblock %}
 {% block content %}
-<h2>Batches</h2>
+<h2>Upload an evaluation batch</h2>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
-<p>{{ batches|length }} batch(es).</p>
+<form method="post" action="{{ url_for('batches.upload') }}" enctype="multipart/form-data">
+  <input type="file" name="archive" accept=".zip" required>
+  <button type="submit">Upload and analyse</button>
+</form>
+<p class="hint">
+  A ZIP containing your audio files and exactly one CSV manifest with a <code>name</code> column.
+</p>
+
+<h2>Recent batches</h2>
+{% if batches %}
+<table>
+  <thead><tr><th>Batch</th><th>Submitted</th><th>Status</th><th>Files</th></tr></thead>
+  <tbody>
+  {% for batch in batches %}
+    <tr>
+      <td><a href="{{ url_for('batches.detail', batch_id=batch.batch_id) }}">{{ batch.batch_id[:8] }}</a></td>
+      <td>{{ batch.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+      <td>{{ batch.status.value }}</td>
+      <td>{{ batch.total }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No batches yet.</p>
+{% endif %}
 {% endblock %}
