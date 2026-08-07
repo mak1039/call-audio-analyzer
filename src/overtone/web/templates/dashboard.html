@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Batches — Overtone{% endblock %}
+{% block content %}
+<h2>Batches</h2>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<p>{{ batches|length }} batch(es).</p>
+{% endblock %}
