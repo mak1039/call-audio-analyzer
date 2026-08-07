@@ -1,3 +1,5 @@
+import atexit
+
 from flask import Flask, render_template
 from werkzeug.exceptions import RequestEntityTooLarge
 
@@ -12,7 +14,9 @@ def create_app(config: AppConfig, job_runner: JobRunner | None = None) -> Flask:
     app.config["SECRET_KEY"] = config.secret_key
     app.config["MAX_CONTENT_LENGTH"] = config.max_upload_bytes
     app.config["OVERTONE_CONFIG"] = config
-    app.extensions["overtone"] = build_container(config, job_runner=job_runner)
+    container = build_container(config, job_runner=job_runner)
+    app.extensions["overtone"] = container
+    atexit.register(container.shutdown)
     app.register_blueprint(auth.blueprint)
     app.register_blueprint(batches.blueprint)
     _register_health_check(app)

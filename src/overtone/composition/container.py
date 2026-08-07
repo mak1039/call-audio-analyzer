@@ -30,6 +30,15 @@ class Container:
     serializers: dict[str, ResultSerializer]
     job_runner: JobRunner
 
+    def shutdown(self) -> None:
+        """Stop accepting/finish in-flight work, then release held resources.
+
+        Order matters: the job runner may still be using the repository, so it must
+        finish before the repository's connections are closed.
+        """
+        self.job_runner.shutdown()
+        self.batches.close()
+
 
 def build_container(config: AppConfig, job_runner: JobRunner | None = None) -> Container:
     """The one place that knows every layer.

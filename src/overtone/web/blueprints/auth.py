@@ -17,6 +17,7 @@ def login_form() -> str:
 def login() -> Response | tuple[str, int]:
     if not _credentials_match(request.form.get("username", ""), request.form.get("password", "")):
         return render_template("login.html", error="Incorrect username or password."), 401
+    session.clear()
     session[SESSION_KEY] = True
     return redirect(url_for("batches.dashboard"))
 
@@ -29,6 +30,6 @@ def logout() -> Response:
 
 def _credentials_match(username: str, password: str) -> bool:
     config = current_app.config["OVERTONE_CONFIG"]
-    return hmac.compare_digest(username, config.username) and hmac.compare_digest(
-        password, config.password
-    )
+    username_matches = hmac.compare_digest(username, config.username)
+    password_matches = hmac.compare_digest(password, config.password)
+    return username_matches and password_matches
