@@ -201,10 +201,13 @@ def test_audio_is_deleted_once_processing_finishes(
 def test_a_crash_outside_item_analysis_marks_the_batch_failed(
     repository: RecordingRepository, storage: LocalFileStorage
 ):
-    batch_id = seed(repository, storage, BatchItem.pending("a.ogg"))
+    batch_id = seed(repository, storage, BatchItem.pending("a.ogg"), BatchItem.pending("b.ogg"))
     repository.explode_on_completion = True
 
     with pytest.raises(RuntimeError):
         run(repository, storage, FakeAnalyzer(), batch_id)
 
-    assert repository.get(batch_id).status is BatchStatus.FAILED
+    batch = repository.get(batch_id)
+    assert batch.status is BatchStatus.FAILED
+    assert batch.items[0].status is ItemStatus.SUCCEEDED
+    assert batch.items[0].result == RESULT

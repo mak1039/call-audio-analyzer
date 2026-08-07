@@ -1,8 +1,12 @@
+import logging
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
 from overtone.application.ports.file_storage import FileStorage
 from overtone.domain.batch import BatchId
+
+logger = logging.getLogger(__name__)
 
 
 class LocalFileStorage(FileStorage):
@@ -24,4 +28,11 @@ class LocalFileStorage(FileStorage):
         return candidate
 
     def discard(self, batch_id: BatchId) -> None:
-        shutil.rmtree(self._root / batch_id, ignore_errors=True)
+        shutil.rmtree(self._root / batch_id, onexc=self._log_discard_failure)
+
+    def _log_discard_failure(
+        self, func: Callable[..., object], path: str, exc: BaseException
+    ) -> None:
+        if isinstance(exc, FileNotFoundError):
+            return
+        logger.error("failed to discard %s during %s: %s", path, func.__name__, exc)

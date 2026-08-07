@@ -32,7 +32,7 @@ class ProcessBatch:
         try:
             self._run(batch)
         except Exception:
-            self._mark_failed(batch)
+            self._mark_failed(batch_id)
             raise
         finally:
             self._storage.discard(batch_id)
@@ -43,9 +43,9 @@ class ProcessBatch:
             self._repository.save(batch)
         self._repository.save(batch.completed())
 
-    def _mark_failed(self, batch: Batch) -> None:
+    def _mark_failed(self, batch_id: BatchId) -> None:
         try:
-            self._repository.save(batch.failed())
+            self._repository.save(self._repository.get(batch_id).failed())
         except Exception:  # noqa: BLE001 - already failing; do not mask the original error
             logger.exception("could not record batch failure")
 

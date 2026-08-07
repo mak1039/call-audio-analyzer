@@ -1,3 +1,5 @@
+import logging
+import shutil
 from pathlib import Path
 
 import pytest
@@ -66,3 +68,22 @@ def test_discard_is_safe_to_call_twice(tmp_path: Path):
 
     storage.discard(batch_id)
     storage.discard(batch_id)
+
+
+def test_discard_logs_failures_instead_of_silently_swallowing_them(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    storage = LocalFileStorage(tmp_path)
+    batch_id = new_batch_id()
+
+    def failing_rmtree(path: Path, onexc: object) -> None:
+        onexc(shutil.rmtree, str(path), PermissionError("locked by antivirus"))  # type: ignore[operator]
+
+    monkeypatch.setattr(shutil, "rmtree", failing_rmtree)
+
+    with caplog.at_level(logging.ERROR):
+        storage.discard(batch_id)  # must not raise despite the failure
+
+    assert "locked by antivirus" in caplog.text
