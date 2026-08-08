@@ -29,7 +29,13 @@ def logout() -> Response:
 
 
 def _credentials_match(username: str, password: str) -> bool:
+    """Compare both fields every time; short-circuiting would leak which one was wrong."""
     config = current_app.config["OVERTONE_CONFIG"]
-    username_matches = hmac.compare_digest(username, config.username)
-    password_matches = hmac.compare_digest(password, config.password)
+    username_matches = hmac.compare_digest(_utf8(username), _utf8(config.username))
+    password_matches = hmac.compare_digest(_utf8(password), _utf8(config.password))
     return username_matches and password_matches
+
+
+def _utf8(value: str) -> bytes:
+    """compare_digest refuses str with non-ASCII characters; bytes it always accepts."""
+    return value.encode("utf-8")

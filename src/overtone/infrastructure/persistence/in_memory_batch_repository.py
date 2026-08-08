@@ -4,7 +4,7 @@ from overtone.domain.exceptions import BatchNotFoundError
 
 
 class InMemoryBatchRepository(BatchRepository):
-    """Process-local batch store. Sufficient for the CLI; replaced by SQLite for the web app."""
+    """Process-local batch store. Sufficient for the CLI; the web app uses Postgres."""
 
     def __init__(self) -> None:
         self._batches: dict[BatchId, Batch] = {}

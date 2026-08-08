@@ -130,7 +130,8 @@ non-default values) to confirm the production-shaped path works end to end, not 
 in-memory fallback.
 
 The container needs no persistent volume: uploaded audio is extracted to
-`OVERTONE_WORKSPACE_ROOT` and deleted once a batch finishes processing.
+`OVERTONE_WORKSPACE_ROOT` and deleted once the batch finishes — or immediately, if the batch is
+rejected before processing starts.
 
 ### Environment variables
 
@@ -140,7 +141,7 @@ The container needs no persistent volume: uploaded audio is extracted to
 | `DATABASE_URL` | production | Postgres connection string. Unset → in-memory repository. |
 | `SECRET_KEY` | see below | Flask session signing key. |
 | `OVERTONE_USERNAME` | see below | Dashboard login username. |
-| `OVERTONE_PASSWORD` | see below | Dashboard login password. |
+| `OVERTONE_PASSWORD` | see below | Dashboard login password. Must be high-entropy — see below. |
 | `OVERTONE_MAX_UPLOAD_MB` | no (default `500`) | Upload size cap. |
 | `OVERTONE_WORKSPACE_ROOT` | no (default `/tmp/overtone`) | Scratch directory for extracted audio. |
 
@@ -153,6 +154,14 @@ real database at the dashboard while leaving the default credentials in place. `
 `SECRET_KEY` via `generateValue: true` and leaves `OVERTONE_USERNAME` / `OVERTONE_PASSWORD` as
 `sync: false`, so they must be set by hand in the Render dashboard before the service can boot.
 
+**`OVERTONE_PASSWORD` must be a generated high-entropy value** — for example
+`python -c "import secrets; print(secrets.token_urlsafe(24))"` — not a memorable phrase, and not
+reused from anywhere else. The startup guard only rejects the literal default `admin`; it cannot
+judge strength, and it is the only thing standing between the internet and the dashboard. There is
+no rate limiting or lockout on `/login` (see [Known limitations](#known-limitations)), so a weak
+password can be guessed at whatever rate the free instance will serve. `SECRET_KEY` should be
+generated the same way; `render.yaml` already does that for you via `generateValue: true`.
+
 ### Known limitations
 
 - **Cold starts.** The Render free web service instance sleeps after 15 minutes of inactivity.
@@ -162,12 +171,18 @@ real database at the dashboard while leaving the default credentials in place. `
   Record the creation date once the blueprint is deployed and confirm it falls after the
   evaluation window; a new database (and a fresh `DATABASE_URL`) will be needed after that.
 - **Ephemeral audio.** Batch workspaces live under `OVERTONE_WORKSPACE_ROOT` on local, non-persistent
-  disk. Audio never outlives processing — it is deleted as soon as a batch finishes — and a
-  redeploy or restart mid-batch loses that batch's audio, leaving it stuck `running` until the
-  process is replaced. Batch metadata and results survive in Postgres; the source audio does not.
+  disk. Audio never outlives processing — it is deleted as soon as a batch finishes, and at once
+  if the batch is rejected before processing starts — and a redeploy or restart mid-batch loses
+  that batch's audio, leaving it stuck `running` until the process is replaced. Batch metadata and results survive in Postgres; the source audio does not.
 - **512 MB RAM on the free instance.** Sufficient for M2's stub predictions. It will not hold
   SenseVoice plus YAMNet under PyTorch — M5 must move to quantised ONNX Runtime models or a paid
   instance.
+- **No login rate limiting or lockout.** `/login` accepts unlimited attempts at whatever rate
+  the instance will serve, and Render's free tier puts nothing in front of it. The only defence is
+  the strength of `OVERTONE_PASSWORD` (see [Environment variables](#environment-variables)).
+  Per-IP throttling is the next step if this moves beyond a trial; in-app throttling was left out
+  deliberately because it needs state shared across gunicorn workers, which means another
+  dependency for a trial deployment.
 - **Multiple gunicorn workers require `DATABASE_URL`.** The in-memory batch repository is
   per-process; running with two gunicorn workers and no database means roughly half of status
   polls and downloads for a given batch will 404, depending on which worker handles the request.
@@ -178,7 +193,10 @@ real database at the dashboard while leaving the default credentials in place. `
 
 Production call audio is confidential.
 
-- Audio is extracted to a temporary workspace that is deleted before results are written.
+- Audio is extracted to a per-batch workspace that is deleted on every exit path: when the batch
+  finishes, when processing dies part-way, and when the batch is rejected before processing even
+  starts (unreadable archive, no manifest, more than one manifest). Only the analysis results
+  outlive the audio; the CLI additionally puts the whole workspace inside a temporary directory.
 - `.gitignore` excludes every audio extension plus `project-resource-files/` and `data/*.zip`.
 - Nothing leaves the machine: the M1 pipeline makes no network calls.
 
@@ -188,7 +206,7 @@ labels and is committed.
 ## Development
 
 ```bash
-uv run pytest                 # 139 passed, 8 skipped (skips are Postgres tests, gated on DATABASE_URL)
+uv run pytest                 # 147 passed, 9 skipped (skips are Postgres tests, gated on DATABASE_URL)
 uv run ruff check .
 uv run black --check .
 uv run mypy                   # strict on domain/ and application/

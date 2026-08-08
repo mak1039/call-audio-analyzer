@@ -75,6 +75,11 @@ class Batch:
     def failed_count(self) -> int:
         return self._count(ItemStatus.FAILED)
 
+    @property
+    def is_finished(self) -> bool:
+        """Whether this batch has reached a terminal status and will not change again."""
+        return self.status in {BatchStatus.COMPLETED, BatchStatus.FAILED}
+
     def started(self) -> "Batch":
         return replace(self, status=BatchStatus.RUNNING)
 

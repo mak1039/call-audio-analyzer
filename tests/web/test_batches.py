@@ -125,7 +125,7 @@ def test_a_corrupt_archive_is_reported_on_the_upload_page(logged_in: FlaskClient
     assert "could not read archive" in response.data.decode()
 
 
-def test_a_batch_with_no_manifest_is_reported(logged_in: FlaskClient):
+def test_a_batch_with_no_manifest_is_reported(logged_in: FlaskClient, tmp_path: Path):
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w") as archive:
         archive.writestr("call_001.ogg", b"OggS")
@@ -139,6 +139,8 @@ def test_a_batch_with_no_manifest_is_reported(logged_in: FlaskClient):
 
     assert response.status_code == 400
     assert "manifest" in response.data.decode().lower()
+    assert list((tmp_path / "workspace").rglob("*.ogg")) == []
+    assert list((tmp_path / "workspace").rglob("*")) == []
 
 
 def test_uploading_without_a_file_is_reported(logged_in: FlaskClient):
@@ -148,9 +150,9 @@ def test_uploading_without_a_file_is_reported(logged_in: FlaskClient):
 
 
 def test_the_dashboard_lists_a_submitted_batch(logged_in: FlaskClient):
-    upload(logged_in)
+    batch_id = upload(logged_in).rsplit("/", 1)[-1]
 
-    assert "batch" in logged_in.get("/").data.decode().lower()
+    assert batch_id[:8] in logged_in.get("/").data.decode()
 
 
 def test_an_unknown_batch_returns_404(logged_in: FlaskClient):

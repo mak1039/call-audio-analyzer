@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from overtone.application.ports.archive_extractor import ArchiveExtractor
 from overtone.application.ports.clock import Clock
 from overtone.application.use_cases.submit_batch import SubmitBatch
 from overtone.domain.enums import BatchStatus, ItemStatus
@@ -22,6 +23,14 @@ CREATED_AT = datetime(2026, 8, 7, 12, 0, tzinfo=UTC)
 class FixedClock(Clock):
     def now(self) -> datetime:
         return CREATED_AT
+
+
+class HalfWayExtractor(ArchiveExtractor):
+    """Writes one audio file, then fails — what a mid-extraction OSError looks like."""
+
+    def extract(self, archive: Path, destination: Path) -> tuple[Path, ...]:  # noqa: ARG002
+        (destination / "call_001.ogg").write_bytes(b"confidential")
+        raise CorruptArchiveError("disk gave out half way through")
 
 
 @pytest.fixture
@@ -43,6 +52,12 @@ def submit(repository: InMemoryBatchRepository, storage: LocalFileStorage) -> Su
         repository=repository,
         clock=FixedClock(),
     )
+
+
+def workspace_leftovers(tmp_path: Path) -> list[Path]:
+    """Everything still sitting under the storage root the `storage` fixture hands out."""
+    root = tmp_path / "batches"
+    return sorted(root.rglob("*")) if root.exists() else []
 
 
 def build_zip(tmp_path: Path, entries: dict[str, bytes]) -> Path:
@@ -162,6 +177,15 @@ def test_rejects_a_batch_with_no_manifest(submit: SubmitBatch, tmp_path: Path):
         submit.execute(archive)
 
 
+def test_a_batch_with_no_manifest_leaves_no_audio_behind(submit: SubmitBatch, tmp_path: Path):
+    archive = build_zip(tmp_path, {"call_001.ogg": b"aaa"})
+
+    with pytest.raises(ManifestError):
+        submit.execute(archive)
+
+    assert workspace_leftovers(tmp_path) == []
+
+
 def test_rejects_a_batch_with_more_than_one_manifest(submit: SubmitBatch, tmp_path: Path):
     archive = build_zip(
         tmp_path, {"labels.csv": MANIFEST, "other.csv": MANIFEST, "call_001.ogg": b"a"}
@@ -171,9 +195,49 @@ def test_rejects_a_batch_with_more_than_one_manifest(submit: SubmitBatch, tmp_pa
         submit.execute(archive)
 
 
+def test_a_batch_with_two_manifests_leaves_no_audio_behind(submit: SubmitBatch, tmp_path: Path):
+    archive = build_zip(
+        tmp_path, {"labels.csv": MANIFEST, "other.csv": MANIFEST, "call_001.ogg": b"a"}
+    )
+
+    with pytest.raises(ManifestError):
+        submit.execute(archive)
+
+    assert workspace_leftovers(tmp_path) == []
+
+
+def test_audio_written_before_extraction_failed_is_discarded(
+    repository: InMemoryBatchRepository, storage: LocalFileStorage, tmp_path: Path
+):
+    submit = SubmitBatch(
+        extractor=HalfWayExtractor(),
+        parser=CsvManifestParser(),
+        storage=storage,
+        repository=repository,
+        clock=FixedClock(),
+    )
+
+    with pytest.raises(CorruptArchiveError):
+        submit.execute(tmp_path / "batch.zip")
+
+    assert workspace_leftovers(tmp_path) == []
+
+
+def test_an_accepted_batch_keeps_its_audio_for_processing(
+    submit: SubmitBatch, storage: LocalFileStorage, tmp_path: Path
+):
+    archive = build_zip(tmp_path, {"labels.csv": MANIFEST, "call_001.ogg": b"aaa"})
+
+    batch_id = submit.execute(archive)
+
+    assert storage.path_for(batch_id, "call_001.ogg").exists()
+
+
 def test_propagates_a_corrupt_archive(submit: SubmitBatch, tmp_path: Path):
     broken = tmp_path / "batch.zip"
     broken.write_bytes(b"not a zip")
 
     with pytest.raises(CorruptArchiveError):
         submit.execute(broken)
+
+    assert workspace_leftovers(tmp_path) == []

@@ -85,7 +85,7 @@ def _status_payload(batch: Batch) -> dict[str, Any]:
         "succeeded": batch.succeeded_count,
         "failed": batch.failed_count,
         "unmatched_files": list(batch.unmatched_files),
-        "finished": batch.status.value in {"completed", "failed"},
+        "finished": batch.is_finished,
     }
 
 

@@ -6,9 +6,10 @@ from pathlib import Path
 
 from overtone.application.ports.result_serializer import ResultSerializer
 from overtone.composition.config import AppConfig
-from overtone.composition.container import build_container
+from overtone.composition.container import Container, build_container
 from overtone.domain.batch import Batch
 from overtone.domain.exceptions import DomainError
+from overtone.infrastructure.jobs.synchronous_job_runner import SynchronousJobRunner
 
 FORMAT_CHOICES = ("csv", "json", "both")
 
@@ -24,14 +25,26 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 def _analyze(args: argparse.Namespace) -> int:
     with tempfile.TemporaryDirectory(prefix="overtone-") as workspace:
-        container = build_container(AppConfig(workspace_root=Path(workspace)))
-        batch_id = container.submit_batch.execute(args.archive)
-        _report_validation(container.batches.get(batch_id))
-        container.process_batch.execute(batch_id)
-        batch = container.batches.get(batch_id)
+        container = _container_for(Path(workspace))
+        try:
+            batch = _run_batch(container, args.archive)
+        finally:
+            container.shutdown()
     _write_results(batch, args.out, _selected_formats(args.format), container.serializers)
     _report_summary(batch)
     return 0
+
+
+def _container_for(workspace: Path) -> Container:
+    """The CLI runs one batch and exits; a thread pool would be threads spawned for nothing."""
+    return build_container(AppConfig(workspace_root=workspace), job_runner=SynchronousJobRunner())
+
+
+def _run_batch(container: Container, archive: Path) -> Batch:
+    batch_id = container.submit_batch.execute(archive)
+    _report_validation(container.batches.get(batch_id))
+    container.process_batch.execute(batch_id)
+    return container.batches.get(batch_id)
 
 
 def _report_validation(batch: Batch) -> None:

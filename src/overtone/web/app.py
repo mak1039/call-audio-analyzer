@@ -14,6 +14,7 @@ def create_app(config: AppConfig, job_runner: JobRunner | None = None) -> Flask:
     app.config["SECRET_KEY"] = config.secret_key
     app.config["MAX_CONTENT_LENGTH"] = config.max_upload_bytes
     app.config["OVERTONE_CONFIG"] = config
+    _configure_session_cookie(app, config)
     container = build_container(config, job_runner=job_runner)
     app.extensions["overtone"] = container
     atexit.register(container.shutdown)
@@ -22,6 +23,18 @@ def create_app(config: AppConfig, job_runner: JobRunner | None = None) -> Flask:
     _register_health_check(app)
     _register_error_handlers(app)
     return app
+
+
+def _configure_session_cookie(app: Flask, config: AppConfig) -> None:
+    """Harden the session cookie, marking it HTTPS-only on real deployments.
+
+    A configured database is this project's signal for "deployed for real", and Render
+    serves HTTPS. Setting Secure unconditionally would stop the cookie being sent at all
+    over the plain HTTP used by local development and the test client.
+    """
+    app.config["SESSION_COOKIE_SECURE"] = config.database_url is not None
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 
 def _register_health_check(app: Flask) -> None:

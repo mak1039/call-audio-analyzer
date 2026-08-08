@@ -13,6 +13,9 @@ from overtone.domain.exceptions import BatchNotFoundError
 SCHEMA = Path(__file__).with_name("schema.sql")
 COLUMNS = "batch_id, status, created_at, unmatched_files, items"
 
+# Arbitrary but fixed: any process running this DDL must pick the same key to be serialised.
+SCHEMA_LOCK_KEY = 8_312_907_441_120_734
+
 UPSERT = f"""
     INSERT INTO batches ({COLUMNS}) VALUES (%s, %s, %s, %s, %s)
     ON CONFLICT (batch_id) DO UPDATE SET
@@ -33,7 +36,14 @@ class PostgresBatchRepository(BatchRepository):
         self._pool.close()
 
     def create_schema(self) -> None:
-        with self._pool.connection() as connection:
+        """Create the tables and indexes. Safe to run concurrently and repeatedly.
+
+        Postgres' IF NOT EXISTS check is not atomic with the catalog insert, so two
+        gunicorn workers booting together can collide on pg_type and crash on boot. The
+        advisory lock serialises them; whoever arrives second finds everything present.
+        """
+        with self._pool.connection() as connection, connection.transaction():
+            connection.execute("SELECT pg_advisory_xact_lock(%s)", (SCHEMA_LOCK_KEY,))
             connection.execute(SCHEMA.read_text(encoding="utf-8"))
 
     def delete_all(self) -> None:

@@ -126,6 +126,15 @@ def test_batch_records_when_it_was_created():
     assert batch.created_at == CREATED_AT
 
 
+def test_only_completed_and_failed_batches_are_finished():
+    batch = batch_of("a.ogg")
+
+    assert batch.is_finished is False
+    assert batch.started().is_finished is False
+    assert batch.started().completed().is_finished is True
+    assert batch.started().failed().is_finished is True
+
+
 def test_failed_marks_a_batch_whose_job_died():
     batch = Batch.create(new_batch_id(), (BatchItem.pending("a.ogg"),), CREATED_AT)
 
