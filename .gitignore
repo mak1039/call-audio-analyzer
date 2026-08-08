@@ -1,0 +1,19 @@
+# Production call audio is confidential and must never be committed.
+project-resource-files/
+data/samples/*.ogg
+data/samples/*.wav
+data/samples/*.mp3
+data/samples/*.m4a
+data/samples/*.flac
+data/*.zip
+
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+out/

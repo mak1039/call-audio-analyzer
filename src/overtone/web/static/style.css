@@ -1,0 +1,55 @@
+:root { --line: #d5d8dd; --error: #b3261e; --warn: #8a6100; --muted: #5f6570; }
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1b1d21;
+  background: #fbfbfc;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  border-bottom: 1px solid var(--line);
+  background: #fff;
+}
+
+header h1 { font-size: 1.1rem; margin: 0; }
+header a { color: inherit; text-decoration: none; }
+
+main { max-width: 70rem; margin: 0 auto; padding: 1.5rem; }
+
+h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+
+table { width: 100%; border-collapse: collapse; margin-top: .5rem; font-size: .9rem; }
+th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; }
+
+tr.failed td { background: #fdf2f1; }
+
+.error { color: var(--error); }
+.warning { color: var(--warn); }
+.hint { color: var(--muted); font-size: .875rem; }
+
+form { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+label { display: flex; gap: .5rem; align-items: center; }
+
+button {
+  padding: .45rem .9rem;
+  border: 1px solid var(--line);
+  border-radius: .3rem;
+  background: #1b1d21;
+  color: #fff;
+  cursor: pointer;
+}
+
+input[type="text"], input[type="password"] {
+  padding: .4rem .5rem;
+  border: 1px solid var(--line);
+  border-radius: .3rem;
+}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Batch {{ batch.batch_id[:8] }} — Overtone{% endblock %}
+{% block content %}
+<h2>Batch {{ batch.batch_id[:8] }}</h2>
+
+<p id="progress" data-status-url="{{ url_for('batches.status', batch_id=batch.batch_id) }}">
+  {{ batch.succeeded_count + batch.failed_count }} of {{ batch.total }} processed
+</p>
+
+{% if batch.unmatched_files %}
+<p class="warning">
+  Not listed in the manifest and skipped: {{ batch.unmatched_files|join(', ') }}
+</p>
+{% endif %}
+
+<p>
+  <a href="{{ url_for('batches.download', batch_id=batch.batch_id, fmt='csv') }}">Download CSV</a>
+  &middot;
+  <a href="{{ url_for('batches.download', batch_id=batch.batch_id, fmt='json') }}">Download JSON</a>
+</p>
+
+<table>
+  <thead>
+    <tr>
+      <th>File</th><th>Status</th><th>Tone</th><th>Intensity</th>
+      <th>Noise</th><th>Severity</th><th>Quality</th><th>Overlap</th>
+      <th>Silence</th><th>Confidence</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for item in batch.items %}
+    <tr class="{{ 'failed' if item.status.value == 'failed' else '' }}">
+      <td>{{ item.filename }}</td>
+      <td>{{ item.status.value }}</td>
+      {% if item.result %}
+        <td>{{ item.result.emotional_tone.value }}</td>
+        <td>{{ item.result.emotional_intensity.value }}</td>
+        <td>{{ item.result.background_noise_type or '—' }}</td>
+        <td>{{ item.result.background_noise_severity.value }}</td>
+        <td>{{ item.result.audio_quality.value }}</td>
+        <td>{{ item.result.speaker_overlap_present }}</td>
+        <td>{{ item.result.long_silence_present }}</td>
+        <td>{{ '%.2f'|format(item.result.confidence) }}</td>
+      {% else %}
+        <td colspan="8" class="error">{{ item.error_message }}</td>
+      {% endif %}
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<script src="{{ url_for('static', filename='poll.js') }}" defer></script>
+{% endblock %}
