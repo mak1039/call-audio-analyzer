@@ -7,15 +7,26 @@ build order.
 
 ## Status
 
-**M1 complete — contract and pipeline, no audio intelligence yet.**
+**M2, M3 and M4 complete — hosted, authenticated dashboard, containerised and ready to deploy.**
 
-The full batch pipeline works end to end: ZIP in, validated manifest, per-item error isolation,
-CSV and JSON results out. Predictions currently come from `StubAnalyzer`, which returns a fixed
-`neutral` result with `confidence: 0.0`. Swapping in the real analyzer is a one-line change in
+The full batch pipeline works end to end, now behind a Flask dashboard: log in, upload a ZIP,
+watch progress converge, download CSV and JSON results. Predictions still come from
+`StubAnalyzer`, which returns a fixed `neutral` result with `confidence: 0.0`. Swapping in the
+real analyzer is a one-line change in
 [src/overtone/composition/container.py](src/overtone/composition/container.py) and touches nothing
 else — that is what the `AudioAnalyzer` port is for.
 
-Next: M2 (Flask dashboard), M3 (deploy), M4 (auth), M5 (real analysis), M6 (validation and memo).
+Batches persist to Postgres when `DATABASE_URL` is set (production) and fall back to an in-memory
+repository otherwise (local smoke testing without a database). The app is packaged as a Docker
+image (see [Docker](#docker) below) with a `render.yaml` blueprint for a free Render web service
+plus free Postgres.
+
+**Live URL:** not yet deployed — the project owner pushes and deploys this branch from the Render
+blueprint; this line will be updated with the Render URL once that happens. Credentials
+(`OVERTONE_USERNAME` / `OVERTONE_PASSWORD`) are set as `sync: false` secrets in the Render
+dashboard, never committed, and are shared with evaluators out of band.
+
+Next: M5 (real analysis), M6 (validation and memo).
 
 ## Setup
 
@@ -63,6 +74,94 @@ Mismatches are reported before processing and never abort the batch:
 A structurally broken batch — unreadable archive, no manifest, more than one manifest — exits
 non-zero with a message and no traceback.
 
+## Web dashboard
+
+### Local development
+
+Run Postgres locally with the provided compose file, point the app at it, and run the Flask dev
+server with reload:
+
+```bash
+docker compose up -d                          # postgres:16-alpine on localhost:5432
+export DATABASE_URL=postgresql://overtone:overtone@localhost:5432/overtone
+flask --app overtone.web.wsgi run --debug
+```
+
+Without `DATABASE_URL` set, the app falls back to an in-memory batch repository — fine for
+poking at routes, but note the state does not survive a restart and (see below) is not safe to
+combine with multiple worker processes.
+
+Default local credentials (only in effect when `DATABASE_URL` is unset, or when explicitly
+overridden — see [Environment variables](#environment-variables)) are `admin` / `admin`.
+
+### Docker
+
+Build and run the image exactly as it will run on Render:
+
+```bash
+docker build -t overtone .
+docker run --rm -e PORT=8000 -e SECRET_KEY=local -e OVERTONE_USERNAME=admin \
+  -e OVERTONE_PASSWORD=admin -p 8000:8000 overtone
+```
+
+This was verified locally: `docker build` completes (only the 13 runtime dependencies are
+installed — `pytest`, `ruff`, `black`, and `mypy` are excluded by `--no-dev`), gunicorn starts with
+two workers, `GET /healthz` returns `ok`, `/login` and its stylesheet/script under `/static/`
+serve correctly (confirming `pyproject.toml`'s `force-include` ships `web/templates` and
+`web/static` inside the installed wheel), and a login + upload of
+`data/provided_calls_batch.zip` completes with all three `.ogg` files processed and downloadable
+as CSV and JSON.
+
+The image was also run against the compose Postgres (`DATABASE_URL` pointed at
+`host.docker.internal:5432`, with `SECRET_KEY`/`OVERTONE_USERNAME`/`OVERTONE_PASSWORD` all set to
+non-default values) to confirm the production-shaped path works end to end, not just the
+in-memory fallback.
+
+The container needs no persistent volume: uploaded audio is extracted to
+`OVERTONE_WORKSPACE_ROOT` and deleted once a batch finishes processing.
+
+### Environment variables
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `PORT` | yes (Render sets it) | Port gunicorn binds to. |
+| `DATABASE_URL` | production | Postgres connection string. Unset → in-memory repository. |
+| `SECRET_KEY` | see below | Flask session signing key. |
+| `OVERTONE_USERNAME` | see below | Dashboard login username. |
+| `OVERTONE_PASSWORD` | see below | Dashboard login password. |
+| `OVERTONE_MAX_UPLOAD_MB` | no (default `500`) | Upload size cap. |
+| `OVERTONE_WORKSPACE_ROOT` | no (default `/tmp/overtone`) | Scratch directory for extracted audio. |
+
+**The app refuses to start if `DATABASE_URL` is set while `SECRET_KEY`, `OVERTONE_USERNAME`, or
+`OVERTONE_PASSWORD` are still at their development defaults** (`dev-secret-not-for-production`,
+`admin`, `admin`). `AppConfig.from_env()` raises `InsecureConfigurationError` in that case, which
+crashes every gunicorn worker on boot — verified locally: the container never becomes healthy and
+the logs show the exception repeating per worker. This is deliberate: it is impossible to point a
+real database at the dashboard while leaving the default credentials in place. `render.yaml` sets
+`SECRET_KEY` via `generateValue: true` and leaves `OVERTONE_USERNAME` / `OVERTONE_PASSWORD` as
+`sync: false`, so they must be set by hand in the Render dashboard before the service can boot.
+
+### Known limitations
+
+- **Cold starts.** The Render free web service instance sleeps after 15 minutes of inactivity.
+  The first request after a sleep pays a cold-start penalty of roughly 50 seconds while the
+  instance spins back up.
+- **Free Postgres expiry.** Render's free Postgres plan expires 30 days after its creation date.
+  Record the creation date once the blueprint is deployed and confirm it falls after the
+  evaluation window; a new database (and a fresh `DATABASE_URL`) will be needed after that.
+- **Ephemeral audio.** Batch workspaces live under `OVERTONE_WORKSPACE_ROOT` on local, non-persistent
+  disk. Audio never outlives processing — it is deleted as soon as a batch finishes — and a
+  redeploy or restart mid-batch loses that batch's audio, leaving it stuck `running` until the
+  process is replaced. Batch metadata and results survive in Postgres; the source audio does not.
+- **512 MB RAM on the free instance.** Sufficient for M2's stub predictions. It will not hold
+  SenseVoice plus YAMNet under PyTorch — M5 must move to quantised ONNX Runtime models or a paid
+  instance.
+- **Multiple gunicorn workers require `DATABASE_URL`.** The in-memory batch repository is
+  per-process; running with two gunicorn workers and no database means roughly half of status
+  polls and downloads for a given batch will 404, depending on which worker handles the request.
+  Production always sets `DATABASE_URL` (see `render.yaml`), so this only affects ad hoc local
+  testing without Postgres.
+
 ## Data handling
 
 Production call audio is confidential.
@@ -77,7 +176,7 @@ labels and is committed.
 ## Development
 
 ```bash
-uv run pytest                 # 90 tests
+uv run pytest                 # 139 passed, 8 skipped (skips are Postgres tests, gated on DATABASE_URL)
 uv run ruff check .
 uv run black --check .
 uv run mypy                   # strict on domain/ and application/
@@ -92,6 +191,7 @@ domain/          entities, enums, validation — stdlib only
 application/     use cases and ports (ABCs)
 infrastructure/  adapters — every heavy dependency lives here
 cli/             argument parsing, output formatting
+web/             Flask app factory, blueprints, templates, static assets
 composition/     the container; the only module that knows all layers
 ```
 
