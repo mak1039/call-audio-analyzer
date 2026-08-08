@@ -79,20 +79,32 @@ non-zero with a message and no traceback.
 ### Local development
 
 Run Postgres locally with the provided compose file, point the app at it, and run the Flask dev
-server with reload:
+server with reload. **The moment `DATABASE_URL` is set, `AppConfig.from_env()` refuses to start
+unless `SECRET_KEY`, `OVERTONE_USERNAME`, and `OVERTONE_PASSWORD` are also set to non-default
+values** (see [Environment variables](#environment-variables)) — so all four must be exported
+together:
 
 ```bash
 docker compose up -d                          # postgres:16-alpine on localhost:5432
 export DATABASE_URL=postgresql://overtone:overtone@localhost:5432/overtone
+export SECRET_KEY=local-dev-secret
+export OVERTONE_USERNAME=devuser
+export OVERTONE_PASSWORD=devpassword
 flask --app overtone.web.wsgi run --debug
 ```
 
-Without `DATABASE_URL` set, the app falls back to an in-memory batch repository — fine for
-poking at routes, but note the state does not survive a restart and (see below) is not safe to
-combine with multiple worker processes.
+Note that `admin` / `admin` are themselves the compiled-in defaults (`DEFAULT_USERNAME` /
+`DEFAULT_PASSWORD` in `src/overtone/composition/config.py`), so re-exporting
+`OVERTONE_USERNAME=admin` / `OVERTONE_PASSWORD=admin` alongside `DATABASE_URL` still trips the
+guard — pick values that actually differ from the defaults, as above.
 
-Default local credentials (only in effect when `DATABASE_URL` is unset, or when explicitly
-overridden — see [Environment variables](#environment-variables)) are `admin` / `admin`.
+Without `DATABASE_URL` set at all, the app falls back to an in-memory batch repository and the
+`admin` / `admin` dev-default credentials apply automatically — fine for poking at routes without
+Postgres, but the in-memory state does not survive a restart and (see
+[Known limitations](#known-limitations)) is not safe to combine with multiple worker processes.
+The two modes are mutually exclusive: either leave `DATABASE_URL` unset and get the defaults for
+free, or set it and supply all three secrets yourself — there is no combination where
+`DATABASE_URL` is set and the defaults still work.
 
 ### Docker
 
